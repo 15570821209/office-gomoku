@@ -1,0 +1,7 @@
+.git
+.idea
+__pycache__
+*.py[cod]
+*.png
+*.log
+.DS_Store

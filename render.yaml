@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: office-gomoku-breakroom
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit

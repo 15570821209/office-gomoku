@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f3f5f2">
+  <title>协作排期表</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div>
+          <p class="eyebrow">TEAM WORKSPACE</p>
+          <h1>今日协作排期</h1>
+        </div>
+      </div>
+      <div class="top-actions">
+        <span class="online-dot"><i></i> 已同步</span>
+        <time id="clock">--:--</time>
+        <button class="icon-btn" id="soundButton" title="声音开关" aria-label="声音开关">♪</button>
+        <button class="panic-button" id="panicButton" title="老板键（Esc）"><kbd>Esc</kbd> 工作模式</button>
+      </div>
+    </header>
+
+    <main class="game-layout">
+      <section class="board-card">
+        <div class="board-heading">
+          <div>
+            <div class="status-line"><span id="statusDot"></span><strong id="statusText">黑方回合</strong></div>
+            <p id="roomLabel">本机协作 · 双人轮流</p>
+          </div>
+          <div class="turn-timer"><span>本回合</span><strong id="turnTimer">00:00</strong></div>
+        </div>
+        <div class="board-wrap">
+          <canvas id="board" width="720" height="720" aria-label="十五路五子棋棋盘"></canvas>
+          <div class="toast" id="toast" role="status"></div>
+        </div>
+        <div class="board-toolbar">
+          <button class="secondary" id="undoButton">↶ 撤回一步</button>
+          <button class="secondary" id="restartButton">↻ 重新排期</button>
+          <button class="secondary code-button" id="copyButton" hidden>⧉ 复制邀请</button>
+        </div>
+      </section>
+
+      <aside class="side-panel">
+        <section class="panel score-panel">
+          <div class="panel-title"><span>本轮协作</span><span class="tiny-label" id="gameCount">第 1 局</span></div>
+          <div class="players">
+            <div class="player active" id="blackPlayer">
+              <div class="stone black"></div>
+              <div class="player-copy"><span id="blackName">我方</span><small>BLACK · 先手</small></div>
+              <strong id="blackScore">0</strong>
+            </div>
+            <div class="versus">VS</div>
+            <div class="player" id="whitePlayer">
+              <div class="stone white"></div>
+              <div class="player-copy"><span id="whiteName">搭子</span><small>WHITE · 后手</small></div>
+              <strong id="whiteScore">0</strong>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel progress-panel">
+          <div class="panel-title"><span>项目进度</span><span id="moveCount">0 / 225</span></div>
+          <div class="progress-track"><i id="progressBar"></i></div>
+          <div class="metrics">
+            <div><span>已落子</span><strong id="moveMetric">0</strong></div>
+            <div><span>用时</span><strong id="durationMetric">00:00</strong></div>
+            <div><span>胜率</span><strong id="winRate">--</strong></div>
+          </div>
+        </section>
+
+        <section class="panel signal-panel" id="signalPanel">
+          <div class="panel-title"><span>搭子暗号</span><span class="tiny-label">轻轻提醒</span></div>
+          <div class="signal-grid">
+            <button data-signal="该你了 👀">该你了</button>
+            <button data-signal="稳住，老板路过">老板路过</button>
+            <button data-signal="这步很有想法">夸夸这步</button>
+            <button data-signal="五分钟后开会">五分钟后开会</button>
+          </div>
+          <p class="signal-message" id="signalMessage">等待搭子发来暗号…</p>
+        </section>
+
+        <section class="panel tips-panel">
+          <div class="panel-title"><span>摸鱼守则</span></div>
+          <ul>
+            <li><kbd>Esc</kbd><span>一键切到工作报表</span></li>
+            <li><kbd>R</kbd><span>重新开始本局</span></li>
+            <li><kbd>U</kbd><span>撤回上一步</span></li>
+          </ul>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <section class="cover-screen" id="coverScreen" aria-hidden="true">
+    <div class="sheet-top">
+      <div><strong>Q3 重点项目交付进度跟踪</strong><span>最后更新：<b id="coverTime">--</b></span></div>
+      <button id="backToGame">返回工作台</button>
+    </div>
+    <div class="sheet-tabs"><span class="active">项目进度</span><span>资源排期</span><span>风险台账</span></div>
+    <div class="fake-sheet">
+      <table>
+        <thead><tr><th>#</th><th>工作项</th><th>负责人</th><th>优先级</th><th>计划完成</th><th>当前进度</th><th>状态</th><th>备注</th></tr></thead>
+        <tbody id="fakeTable"></tbody>
+      </table>
+    </div>
+    <p class="cover-hint">按 <kbd>Esc</kbd> 返回</p>
+  </section>
+
+  <dialog id="welcomeDialog" class="modal">
+    <form method="dialog" id="welcomeForm">
+      <div class="modal-badge">● OFFICE BREAK</div>
+      <h2>和搭子下盘五子棋</h2>
+      <p>安静、隐蔽，老板经过时记得按 Esc。</p>
+      <label>你的代号<input id="nickname" maxlength="12" placeholder="例如：需求终结者" autocomplete="off"></label>
+      <div class="mode-grid">
+        <button type="button" class="mode-card selected" data-mode="local">
+          <span class="mode-icon">◐</span><strong>同屏对战</strong><small>坐隔壁，轮流落子</small>
+        </button>
+        <button type="button" class="mode-card" data-mode="create">
+          <span class="mode-icon">⌁</span><strong>创建房间</strong><small>发链接给你的搭子</small>
+        </button>
+        <button type="button" class="mode-card" data-mode="join">
+          <span class="mode-icon">→</span><strong>加入房间</strong><small>输入六位房间码</small>
+        </button>
+      </div>
+      <label id="roomCodeRow" hidden>房间码<input id="roomCode" maxlength="6" placeholder="例如：A7K9Q2" autocomplete="off"></label>
+      <div class="modal-actions"><button type="button" value="cancel" class="text-button" id="laterButton">先随便看看</button><button value="default" class="primary" id="startButton">开始摸鱼</button></div>
+      <p class="form-error" id="formError"></p>
+    </form>
+  </dialog>
+
+  <dialog id="resultDialog" class="modal result-modal">
+    <div class="winner-stone" id="winnerStone"></div>
+    <p class="eyebrow">本轮复盘</p>
+    <h2 id="resultTitle">漂亮！黑方连成五子</h2>
+    <p id="resultDetail">本局共落下 0 子，用时 00:00</p>
+    <div class="result-actions"><button class="secondary" id="closeResult">查看棋盘</button><button class="primary" id="nextRound">再来一局</button></div>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
