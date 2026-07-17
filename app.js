@@ -244,6 +244,7 @@ function initFakeTable() {
 canvas.addEventListener("click",e=>{const p=pointFromEvent(e);if(p)place(p.row,p.col);});
 window.addEventListener("resize",drawBoard);
 document.addEventListener("keydown",e=>{
+  if(document.body.classList.contains("arcade-open")) return;
   if(e.key==="Escape"){e.preventDefault();if(welcome.open||resultDialog.open)return;toggleCover();}
   if(!$("coverScreen").classList.contains("active")&&!welcome.open&&!resultDialog.open){if(e.key.toLowerCase()==="r")restart();if(e.key.toLowerCase()==="u")undo();}
 });

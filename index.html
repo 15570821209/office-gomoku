@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#f3f5f2">
   <title>协作排期表</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="arcade.css">
 </head>
 <body>
   <div class="app-shell">
@@ -21,6 +22,7 @@
         <span class="online-dot"><i></i> 已同步</span>
         <time id="clock">--:--</time>
         <button class="icon-btn" id="soundButton" title="声音开关" aria-label="声音开关">♪</button>
+        <button class="arcade-launch" id="arcadeButton"><span>▦</span> 小游戏</button>
         <button class="panic-button" id="panicButton" title="老板键（Esc）"><kbd>Esc</kbd> 工作模式</button>
       </div>
     </header>
@@ -142,6 +144,103 @@
     <div class="result-actions"><button class="secondary" id="closeResult">查看棋盘</button><button class="primary" id="nextRound">再来一局</button></div>
   </dialog>
 
+  <section class="arcade-layer" id="arcadeLayer" aria-hidden="true">
+    <header class="arcade-topbar">
+      <button class="arcade-back-main" id="arcadeClose" aria-label="返回五子棋">← <span>返回五子棋</span></button>
+      <div class="arcade-brand"><i>▦</i><div><small>OFFICE BREAK</small><strong>摸鱼游戏中心</strong></div></div>
+      <button class="arcade-panic" id="arcadePanic"><kbd>Esc</kbd> 工作模式</button>
+    </header>
+
+    <main class="arcade-main">
+      <section class="arcade-view arcade-home" data-arcade-view="home">
+        <div class="arcade-hero">
+          <div>
+            <p class="arcade-kicker">今日茶歇 · 随时开溜</p>
+            <h2>忙里偷闲，来一局。</h2>
+            <p>单人放空，双人较量。所有游戏都藏在同一张“工作台”后面。</p>
+          </div>
+          <div class="arcade-hero-mark" aria-hidden="true"><span>5</span><span>min</span></div>
+        </div>
+
+        <div class="arcade-section-title"><div><span>游戏库</span><small>4 款轻量小游戏</small></div><p><i></i> 无需下载</p></div>
+        <div class="arcade-grid">
+          <button class="arcade-card featured" data-open-game="gomoku">
+            <span class="arcade-card-art gomoku-art"><i></i><i></i><i></i><i></i><i></i></span>
+            <span class="arcade-card-copy"><em>双人 · 联机 / 同屏</em><strong>五子棋</strong><small>正在进行的经典项目博弈</small></span>
+            <b>继续游戏 →</b>
+          </button>
+          <button class="arcade-card" data-open-game="2048">
+            <span class="arcade-card-art number-art"><i>2</i><i>0</i><i>4</i><i>8</i></span>
+            <span class="arcade-card-copy"><em>单人 · 策略</em><strong>摸鱼 2048</strong><small>合并数字，整理你的思路</small></span>
+            <b>开始游戏 →</b>
+          </button>
+          <button class="arcade-card" data-open-game="mines">
+            <span class="arcade-card-art mine-art"><i>✦</i><i></i><i>2</i><i></i><i>1</i><i></i><i></i><i>⚑</i><i></i></span>
+            <span class="arcade-card-copy"><em>单人 · 推理</em><strong>摸鱼扫雷</strong><small>排查风险，别踩到需求雷区</small></span>
+            <b>开始游戏 →</b>
+          </button>
+          <button class="arcade-card" data-open-game="tictactoe">
+            <span class="arcade-card-art ttt-art"><i>×</i><i></i><i>○</i><i>○</i><i>×</i><i></i><i></i><i></i><i>×</i></span>
+            <span class="arcade-card-copy"><em>双人 · 同屏</em><strong>井字棋</strong><small>三分钟决出谁去拿外卖</small></span>
+            <b>开始游戏 →</b>
+          </button>
+        </div>
+        <p class="arcade-footnote">温馨提示：适度摸鱼有益灵感，看到领导请按 <kbd>Esc</kbd></p>
+      </section>
+
+      <section class="arcade-view mini-game-view" data-arcade-view="2048" hidden>
+        <div class="mini-heading">
+          <button class="mini-back" data-back-arcade>← 游戏库</button>
+          <div><p>单人 · 策略</p><h2>摸鱼 2048</h2><span>方向键或滑动方块，相同数字会自动合并。</span></div>
+          <button class="mini-new" id="new2048">重新开始</button>
+        </div>
+        <div class="game-stage game-2048-stage">
+          <div class="game-score-row"><div><span>本局分数</span><strong id="score2048">0</strong></div><div><span>历史最高</span><strong id="best2048">0</strong></div></div>
+          <div class="board-2048" id="board2048" role="grid" aria-label="2048 游戏棋盘"></div>
+          <p class="mini-status" id="status2048" aria-live="polite">把两个相同数字推到一起</p>
+          <div class="swipe-hint" aria-hidden="true"><span>↑</span><div><span>←</span><span>↓</span><span>→</span></div></div>
+        </div>
+      </section>
+
+      <section class="arcade-view mini-game-view" data-arcade-view="mines" hidden>
+        <div class="mini-heading">
+          <button class="mini-back" data-back-arcade>← 游戏库</button>
+          <div><p>单人 · 推理</p><h2>摸鱼扫雷</h2><span>排查 9 × 9 风险矩阵，找出全部 10 个雷区。</span></div>
+          <button class="mini-new" id="newMines">重新排查</button>
+        </div>
+        <div class="game-stage mine-stage">
+          <div class="mine-toolbar">
+            <div><span>剩余雷区</span><strong id="mineRemain">10</strong></div>
+            <button id="mineFace" aria-label="重新开始扫雷">🙂</button>
+            <div><span>排查用时</span><strong id="mineTime">000</strong></div>
+          </div>
+          <div class="mine-board" id="mineBoard" role="grid" aria-label="扫雷棋盘"></div>
+          <button class="flag-mode" id="flagMode" aria-pressed="false">⚑ 插旗模式：关</button>
+          <p class="mini-status" id="mineStatus" aria-live="polite">点击格子开始排查 · 右键可插旗</p>
+        </div>
+      </section>
+
+      <section class="arcade-view mini-game-view" data-arcade-view="tictactoe" hidden>
+        <div class="mini-heading">
+          <button class="mini-back" data-back-arcade>← 游戏库</button>
+          <div><p>双人 · 同屏</p><h2>井字棋</h2><span>轮流落子，率先连成一条线的人获胜。</span></div>
+          <button class="mini-new" id="newTtt">下一局</button>
+        </div>
+        <div class="game-stage ttt-stage">
+          <div class="ttt-scoreboard">
+            <div class="ttt-player active" id="tttXPlayer"><i>×</i><span>项目经理<small>X 方</small></span><strong id="tttXScore">0</strong></div>
+            <div class="ttt-draws"><span>平局</span><strong id="tttDrawScore">0</strong></div>
+            <div class="ttt-player" id="tttOPlayer"><i>○</i><span>需求方<small>O 方</small></span><strong id="tttOScore">0</strong></div>
+          </div>
+          <div class="ttt-board" id="tttBoard" role="grid" aria-label="井字棋棋盘"></div>
+          <p class="mini-status" id="tttStatus" aria-live="polite">项目经理先手</p>
+          <button class="score-reset" id="resetTttScore">清空比分</button>
+        </div>
+      </section>
+    </main>
+  </section>
+
   <script src="app.js"></script>
+  <script src="arcade.js"></script>
 </body>
 </html>
