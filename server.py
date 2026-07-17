@@ -20,10 +20,12 @@ ROOT = Path(__file__).resolve().parent
 ROOMS: dict[str, dict] = {}
 LOCK = threading.RLock()
 BOARD_SIZE = 15
+GAME_SPECS = {"gomoku": (15, 15, 5), "connect4": (6, 7, 4)}
 
 
-def new_board() -> list[list[int]]:
-    return [[0 for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
+def new_board(game_type: str = "gomoku") -> list[list[int]]:
+    rows, cols, _ = GAME_SPECS.get(game_type, GAME_SPECS["gomoku"])
+    return [[0 for _ in range(cols)] for _ in range(rows)]
 
 
 def room_view(room: dict, player_id: str = "") -> dict:
@@ -31,7 +33,8 @@ def room_view(room: dict, player_id: str = "") -> dict:
     public_moves = [{key: move[key] for key in ("row", "col", "color")} for move in room["moves"]]
     me = room["players"].get(player_id)
     return {
-        "code": room["code"], "board": room["board"], "turn": room["turn"],
+        "code": room["code"], "type": room.get("type", "gomoku"),
+        "board": room["board"], "turn": room["turn"],
         "winner": room["winner"], "winningCells": room["winning_cells"],
         "moves": public_moves, "version": room["version"], "players": players,
         "yourColor": me["color"] if me else 0, "signal": room["signal"],
@@ -39,15 +42,16 @@ def room_view(room: dict, player_id: str = "") -> dict:
     }
 
 
-def find_win(board: list[list[int]], row: int, col: int, color: int) -> list[list[int]]:
+def find_win(board: list[list[int]], row: int, col: int, color: int, target: int = 5) -> list[list[int]]:
+    rows, cols = len(board), len(board[0])
     for dr, dc in ((1, 0), (0, 1), (1, 1), (1, -1)):
         cells = [[row, col]]
         for sign in (1, -1):
             r, c = row + dr * sign, col + dc * sign
-            while 0 <= r < BOARD_SIZE and 0 <= c < BOARD_SIZE and board[r][c] == color:
+            while 0 <= r < rows and 0 <= c < cols and board[r][c] == color:
                 cells.append([r, c])
                 r, c = r + dr * sign, c + dc * sign
-        if len(cells) >= 5:
+        if len(cells) >= target:
             return cells
     return []
 
@@ -124,13 +128,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def create_room(self, data: dict) -> None:
         with LOCK:
+            game_type = str(data.get("type", "gomoku"))
+            if game_type not in GAME_SPECS:
+                self.send_json({"error": "不支持这个游戏类型"}, 400); return
             while True:
                 code = "".join(secrets.choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(6))
                 if code not in ROOMS:
                     break
             player_id = secrets.token_urlsafe(18)
             now = time.time()
-            room = {"code": code, "board": new_board(), "turn": 1, "winner": 0,
+            room = {"code": code, "type": game_type, "board": new_board(game_type), "turn": 1, "winner": 0,
                     "winning_cells": [], "moves": [], "version": 1,
                     "players": {player_id: {"name": clean_name(data.get("name")), "color": 1}},
                     "signal": None, "created_at": now, "last_seen": now}
@@ -142,6 +149,9 @@ class Handler(BaseHTTPRequestHandler):
             room = ROOMS.get(code)
             if not room:
                 self.send_json({"error": "没找到这个房间，请检查房间码"}, 404); return
+            requested_type = str(data.get("type", ""))
+            if requested_type and requested_type != room.get("type", "gomoku"):
+                self.send_json({"error": "房间码属于另一款游戏"}, 409); return
             if len(room["players"]) >= 2:
                 self.send_json({"error": "房间已经坐满两个人了"}, 409); return
             player_id = secrets.token_urlsafe(18)
@@ -159,6 +169,7 @@ class Handler(BaseHTTPRequestHandler):
             if not room:
                 self.send_json({"error": "房间已过期"}, 404); return
             player_id, player = self.get_player(room, data)
+            game_type = room.get("type", "gomoku")
             row, col = data.get("row"), data.get("col")
             if not player:
                 self.send_json({"error": "你不是这个房间的玩家"}, 403); return
@@ -168,14 +179,22 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"error": "本局已经结束"}, 409); return
             if player["color"] != room["turn"]:
                 self.send_json({"error": "还没轮到你"}, 409); return
-            if not isinstance(row, int) or not isinstance(col, int) or not (0 <= row < 15 and 0 <= col < 15):
+            if game_type == "connect4":
+                if not isinstance(col, int) or not 0 <= col < 7:
+                    self.send_json({"error": "落子列无效"}, 400); return
+                row = 5
+                while row >= 0 and room["board"][row][col]:
+                    row -= 1
+                if row < 0:
+                    self.send_json({"error": "这一列已经满了"}, 409); return
+            elif not isinstance(row, int) or not isinstance(col, int) or not (0 <= row < 15 and 0 <= col < 15):
                 self.send_json({"error": "落子位置无效"}, 400); return
             if room["board"][row][col]:
                 self.send_json({"error": "这里已经有棋子了"}, 409); return
             color = player["color"]
             room["board"][row][col] = color
             room["moves"].append({"row": row, "col": col, "color": color, "playerId": player_id})
-            winning = find_win(room["board"], row, col, color)
+            winning = find_win(room["board"], row, col, color, GAME_SPECS[game_type][2])
             if winning:
                 room["winner"], room["winning_cells"] = color, winning
             else:
@@ -189,7 +208,7 @@ class Handler(BaseHTTPRequestHandler):
             room = ROOMS.get(code)
             if not room or data.get("playerId") not in room["players"]:
                 self.send_json({"error": "无法重开这个房间"}, 403); return
-            room.update(board=new_board(), turn=1, winner=0, winning_cells=[], moves=[])
+            room.update(board=new_board(room.get("type", "gomoku")), turn=1, winner=0, winning_cells=[], moves=[])
             room["version"] += 1
             self.send_json(room_view(room, data["playerId"]))
 

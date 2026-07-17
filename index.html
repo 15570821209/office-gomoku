@@ -7,6 +7,7 @@
   <title>协作排期表</title>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="arcade.css">
+  <link rel="stylesheet" href="arcade-extra.css">
 </head>
 <body>
   <div class="app-shell">
@@ -162,7 +163,7 @@
           <div class="arcade-hero-mark" aria-hidden="true"><span>5</span><span>min</span></div>
         </div>
 
-        <div class="arcade-section-title"><div><span>游戏库</span><small>4 款轻量小游戏</small></div><p><i></i> 无需下载</p></div>
+        <div class="arcade-section-title"><div><span>游戏库</span><small>8 款轻量小游戏</small></div><p><i></i> 无需下载</p></div>
         <div class="arcade-grid">
           <button class="arcade-card featured" data-open-game="gomoku">
             <span class="arcade-card-art gomoku-art"><i></i><i></i><i></i><i></i><i></i></span>
@@ -182,6 +183,26 @@
           <button class="arcade-card" data-open-game="tictactoe">
             <span class="arcade-card-art ttt-art"><i>×</i><i></i><i>○</i><i>○</i><i>×</i><i></i><i></i><i></i><i>×</i></span>
             <span class="arcade-card-copy"><em>双人 · 同屏</em><strong>井字棋</strong><small>三分钟决出谁去拿外卖</small></span>
+            <b>开始游戏 →</b>
+          </button>
+          <button class="arcade-card" data-open-game="snake">
+            <span class="arcade-card-art snake-art"><i></i><i></i><i></i><i></i><i></i><b></b></span>
+            <span class="arcade-card-copy"><em>单人 · 反应</em><strong>工位贪吃蛇</strong><small>绕开会议，吃掉所有下午茶</small></span>
+            <b>开始游戏 →</b>
+          </button>
+          <button class="arcade-card" data-open-game="memory">
+            <span class="arcade-card-art memory-art"><i>☕</i><i>?</i><i>⌨</i><i>?</i></span>
+            <span class="arcade-card-copy"><em>单人 · 记忆</em><strong>记忆翻牌</strong><small>找出成对的办公室小物件</small></span>
+            <b>开始游戏 →</b>
+          </button>
+          <button class="arcade-card" data-open-game="connect4">
+            <span class="arcade-card-art connect-art"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+            <span class="arcade-card-copy"><em>双人 · 在线 / 同屏</em><strong>四子棋</strong><small>横竖斜线，率先连成四枚</small></span>
+            <b>开始游戏 →</b>
+          </button>
+          <button class="arcade-card" data-open-game="reaction">
+            <span class="arcade-card-art reaction-art"><i>A</i><b>VS</b><i>L</i></span>
+            <span class="arcade-card-copy"><em>双人 · 同屏</em><strong>反应力对决</strong><small>灯亮再按，看看谁先下班</small></span>
             <b>开始游戏 →</b>
           </button>
         </div>
@@ -237,10 +258,76 @@
           <button class="score-reset" id="resetTttScore">清空比分</button>
         </div>
       </section>
+
+      <section class="arcade-view mini-game-view" data-arcade-view="snake" hidden>
+        <div class="mini-heading">
+          <button class="mini-back" data-back-arcade>← 游戏库</button>
+          <div><p>单人 · 反应</p><h2>工位贪吃蛇</h2><span>方向键、WASD 或屏幕按钮控制，别撞上边界和自己。</span></div>
+          <button class="mini-new" id="newSnake">重新开始</button>
+        </div>
+        <div class="game-stage snake-stage">
+          <div class="game-score-row"><div><span>下午茶</span><strong id="snakeScore">0</strong></div><div><span>历史最高</span><strong id="snakeBest">0</strong></div></div>
+          <canvas class="snake-canvas" id="snakeCanvas" width="480" height="480" aria-label="贪吃蛇游戏区域"></canvas>
+          <p class="mini-status" id="snakeStatus" aria-live="polite">点击“开始移动”进入工位巡游</p>
+          <button class="extra-primary" id="snakeToggle">开始移动</button>
+          <div class="snake-pad" aria-label="方向控制"><button data-snake-dir="up">↑</button><div><button data-snake-dir="left">←</button><button data-snake-dir="down">↓</button><button data-snake-dir="right">→</button></div></div>
+        </div>
+      </section>
+
+      <section class="arcade-view mini-game-view" data-arcade-view="memory" hidden>
+        <div class="mini-heading">
+          <button class="mini-back" data-back-arcade>← 游戏库</button>
+          <div><p>单人 · 记忆</p><h2>记忆翻牌</h2><span>翻开办公室小物件，用最少步数找到全部 8 对。</span></div>
+          <button class="mini-new" id="newMemory">重新洗牌</button>
+        </div>
+        <div class="game-stage memory-stage">
+          <div class="memory-metrics"><div><span>已配对</span><strong id="memoryPairs">0 / 8</strong></div><div><span>步数</span><strong id="memoryMoves">0</strong></div><div><span>用时</span><strong id="memoryTime">00:00</strong></div></div>
+          <div class="memory-board" id="memoryBoard" role="grid" aria-label="记忆翻牌区域"></div>
+          <p class="mini-status" id="memoryStatus" aria-live="polite">选择两张卡片开始</p>
+        </div>
+      </section>
+
+      <section class="arcade-view mini-game-view" data-arcade-view="connect4" hidden>
+        <div class="mini-heading">
+          <button class="mini-back" data-back-arcade>← 游戏库</button>
+          <div><p>双人 · 在线 / 同屏</p><h2>四子棋</h2><span>棋子会落到列底，率先横、竖或斜连成四枚获胜。</span></div>
+          <button class="mini-new" id="newConnect4">重新开局</button>
+        </div>
+        <div class="game-stage connect-stage">
+          <div class="connect-setup" id="connectSetup">
+            <label>你的代号<input id="connectName" maxlength="12" placeholder="例如：摸鱼专员"></label>
+            <div class="connect-actions"><button id="connectLocal">双人同屏</button><button id="connectCreate">创建在线房间</button></div>
+            <div class="connect-join"><input id="connectCode" maxlength="6" placeholder="输入六位房间码"><button id="connectJoin">加入房间</button></div>
+            <p id="connectError"></p>
+          </div>
+          <div class="connect-info">
+            <div class="connect-player active" id="connectRed"><i></i><span id="connectRedName">红方</span></div>
+            <div><small id="connectRoom">同屏对战</small><strong id="connectStatus">红方回合</strong></div>
+            <div class="connect-player" id="connectYellow"><i></i><span id="connectYellowName">黄方</span></div>
+          </div>
+          <div class="connect-board" id="connectBoard" role="grid" aria-label="四子棋棋盘"></div>
+          <div class="connect-tools"><button id="connectShare" hidden>复制邀请链接</button><button id="connectExit" hidden>退出在线房间</button></div>
+        </div>
+      </section>
+
+      <section class="arcade-view mini-game-view" data-arcade-view="reaction" hidden>
+        <div class="mini-heading">
+          <button class="mini-back" data-back-arcade>← 游戏库</button>
+          <div><p>双人 · 同屏</p><h2>反应力对决</h2><span>等信号变绿后再按，抢跑会直接送对方一分。</span></div>
+          <button class="mini-new" id="newReaction">清空比分</button>
+        </div>
+        <div class="game-stage reaction-stage">
+          <div class="reaction-score"><div><span>A 方</span><strong id="reactionAScore">0</strong></div><p>先得 5 分获胜</p><div><span>L 方</span><strong id="reactionLScore">0</strong></div></div>
+          <div class="reaction-signal" id="reactionSignal"><small>READY?</small><strong id="reactionText">点击开始本轮</strong><span id="reactionTime">A 键 / L 键</span></div>
+          <div class="reaction-buttons"><button data-reaction-player="A"><kbd>A</kbd><span>A 方抢按</span></button><button data-reaction-player="L"><span>L 方抢按</span><kbd>L</kbd></button></div>
+          <button class="extra-primary" id="startReaction">开始本轮</button>
+        </div>
+      </section>
     </main>
   </section>
 
   <script src="app.js"></script>
   <script src="arcade.js"></script>
+  <script src="arcade-extra.js"></script>
 </body>
 </html>

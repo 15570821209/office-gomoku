@@ -155,7 +155,7 @@ async function api(path, body) {
 }
 
 async function beginOnline(mode, name, code) {
-  const data = mode === "create" ? await api("/api/rooms", {name}) : await api(`/api/rooms/${code}/join`, {name});
+  const data = mode === "create" ? await api("/api/rooms", {name,type:"gomoku"}) : await api(`/api/rooms/${code}/join`, {name,type:"gomoku"});
   state.mode="online"; state.room=data.code; state.playerId=data.playerId; state.myColor=data.yourColor;
   state.startedAt=Date.now(); state.turnStartedAt=Date.now(); syncRemote(data, true);
   localStorage.setItem("gomokuName", name); localStorage.setItem("gomokuSession", JSON.stringify({room:state.room,playerId:state.playerId}));
@@ -268,5 +268,5 @@ $("laterButton").onclick=()=>welcome.close();
 
 function tick(){const now=new Date();$("clock").textContent=now.toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit",hour12:false});$("turnTimer").textContent=formatTime((Date.now()-state.turnStartedAt)/1000);$("durationMetric").textContent=formatTime((Date.now()-state.startedAt)/1000);}
 
-function init(){initFakeTable();$("nickname").value=localStorage.getItem("gomokuName")||"";const queryRoom=new URLSearchParams(location.search).get("room");if(queryRoom){selectedMode="join";$("roomCode").value=queryRoom.toUpperCase().slice(0,6);document.querySelectorAll("[data-mode]").forEach(b=>b.classList.toggle("selected",b.dataset.mode==="join"));$("roomCodeRow").hidden=false;}state.signalPanel=false;render();tick();setInterval(tick,1000);setTimeout(()=>welcome.showModal(),180);}
+function init(){initFakeTable();$("nickname").value=localStorage.getItem("gomokuName")||"";const params=new URLSearchParams(location.search),queryRoom=params.get("room"),queryGame=params.get("game");if(queryRoom&&queryGame!=="connect4"){selectedMode="join";$("roomCode").value=queryRoom.toUpperCase().slice(0,6);document.querySelectorAll("[data-mode]").forEach(b=>b.classList.toggle("selected",b.dataset.mode==="join"));$("roomCodeRow").hidden=false;}state.signalPanel=false;render();tick();setInterval(tick,1000);if(queryGame!=="connect4")setTimeout(()=>welcome.showModal(),180);}
 init();
