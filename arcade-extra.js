@@ -38,16 +38,72 @@
   function leaveC4(){clearInterval(c4.poll);Object.assign(c4,{mode:"local",room:"",playerId:"",myColor:0,players:[],version:0});$("connectShare").hidden=true;$("connectExit").hidden=true;history.replaceState(null,"",location.pathname);initC4();}
   $("connectBoard").onclick=e=>{const cell=e.target.closest("[data-connect-col]");if(cell)dropC4(Number(cell.dataset.connectCol));};$("connectLocal").onclick=leaveC4;$("connectCreate").onclick=()=>startC4Online("create");$("connectJoin").onclick=()=>startC4Online("join");$("newConnect4").onclick=restartC4;$("connectExit").onclick=leaveC4;$("connectShare").onclick=async()=>{const url=new URL(location.href);url.search=new URLSearchParams({game:"connect4",room:c4.room});try{await navigator.clipboard.writeText(`来玩四子棋，房间码 ${c4.room}\n${url}`);setC4Status("邀请链接已复制");}catch(_){setC4Status(`房间码：${c4.room}`);}};
 
-  // 反应力对决
-  const reaction={scores:{A:0,L:0},phase:"idle",timer:null,readyAt:0};
-  function startReaction(){clearTimeout(reaction.timer);reaction.phase="waiting";$("reactionSignal").className="reaction-signal waiting";$("reactionText").textContent="保持专注，别抢跑…";$("reactionTime").textContent="等待绿色信号";$("startReaction").disabled=true;reaction.timer=setTimeout(()=>{reaction.phase="ready";reaction.readyAt=performance.now();$("reactionSignal").className="reaction-signal ready";$("reactionText").textContent="现在！";$("reactionTime").textContent="快按下你的键";},1500+Math.random()*2600);}
-  function pressReaction(player){if(reaction.phase!=="waiting"&&reaction.phase!=="ready")return;clearTimeout(reaction.timer);let winner,time;if(reaction.phase==="waiting"){winner=player==="A"?"L":"A";time="抢跑犯规";}else{winner=player;time=`${Math.round(performance.now()-reaction.readyAt)} ms`;}reaction.scores[winner]++;reaction.phase="done";$("reactionSignal").className="reaction-signal result";$("reactionText").textContent=`${winner} 方得分`;$("reactionTime").textContent=time;$("startReaction").disabled=false;$("startReaction").textContent=reaction.scores[winner]>=5?`${winner} 方获胜 · 再来一轮`:"下一轮";renderReaction();}
-  function renderReaction(){$("reactionAScore").textContent=reaction.scores.A;$("reactionLScore").textContent=reaction.scores.L;}
-  $("startReaction").onclick=startReaction;document.querySelectorAll("[data-reaction-player]").forEach(b=>b.onclick=()=>pressReaction(b.dataset.reactionPlayer));$("newReaction").onclick=()=>{clearTimeout(reaction.timer);reaction.scores={A:0,L:0};reaction.phase="idle";$("reactionSignal").className="reaction-signal";$("reactionText").textContent="点击开始本轮";$("reactionTime").textContent="A 键 / L 键";$("startReaction").disabled=false;$("startReaction").textContent="开始本轮";renderReaction();};
+  // 反应力对决（同屏 + 在线，在线结果由服务端裁决）
+  const reaction={scores:{A:0,L:0},phase:"idle",timer:null,readyAt:0,mode:"local",room:"",playerId:"",myColor:0,players:[],version:0,winner:0,pressed:0,early:false,timeMs:0,matchWinner:0,poll:null,busy:false};
+  function reactionSide(color){return color===1?"A 方":"L 方";}
+  async function startReaction(){
+    clearTimeout(reaction.timer);setReactionError();
+    if(reaction.mode==="online"){
+      if(reaction.players.length<2){setReactionError("等搭子加入后再开始");return;}
+      reaction.busy=true;renderReaction();
+      try{syncReaction(await reactionApi(`/api/rooms/${reaction.room}/reaction-start`,{playerId:reaction.playerId}));}
+      catch(error){setReactionError(error.message);}finally{reaction.busy=false;renderReaction();}
+      return;
+    }
+    if(reaction.matchWinner)reaction.scores={A:0,L:0};
+    Object.assign(reaction,{phase:"waiting",winner:0,pressed:0,early:false,timeMs:0,matchWinner:0});renderReaction();
+    reaction.timer=setTimeout(()=>{reaction.phase="ready";reaction.readyAt=performance.now();renderReaction();},1500+Math.random()*2600);
+  }
+  async function pressReaction(player){
+    if(reaction.busy||(reaction.phase!=="waiting"&&reaction.phase!=="ready"))return;
+    clearTimeout(reaction.timer);
+    if(reaction.mode==="online"){
+      const color=player==="A"?1:2;if(reaction.myColor!==color)return;
+      reaction.busy=true;renderReaction();
+      try{syncReaction(await reactionApi(`/api/rooms/${reaction.room}/reaction-press`,{playerId:reaction.playerId}));}
+      catch(error){await pollReaction(true);if(reaction.phase!=="done")setReactionError(error.message);}finally{reaction.busy=false;renderReaction();}
+      return;
+    }
+    const winner=reaction.phase==="waiting"?(player==="A"?"L":"A"):player;
+    reaction.scores[winner]++;Object.assign(reaction,{phase:"done",winner:winner==="A"?1:2,pressed:player==="A"?1:2,early:reaction.phase==="waiting",timeMs:reaction.phase==="ready"?Math.round(performance.now()-reaction.readyAt):0,matchWinner:reaction.scores[winner]>=5?(winner==="A"?1:2):0});renderReaction();
+  }
+  function renderReaction(){
+    $("reactionAScore").textContent=reaction.scores.A;$("reactionLScore").textContent=reaction.scores.L;
+    if(reaction.mode==="online"){
+      const a=reaction.players.find(p=>p.color===1),l=reaction.players.find(p=>p.color===2);
+      $("reactionAName").textContent=a?`${a.name}${reaction.myColor===1?"（我）":""}`:"等待加入";$("reactionLName").textContent=l?`${l.name}${reaction.myColor===2?"（我）":""}`:"等待加入";
+      $("reactionAButtonLabel").textContent=a?`${a.name} 抢按`:"A 方抢按";$("reactionLButtonLabel").textContent=l?`${l.name} 抢按`:"L 方抢按";$("reactionRoom").textContent=`房间 ${reaction.room}`;
+    }else{$("reactionAName").textContent="A 方";$("reactionLName").textContent="L 方";$("reactionAButtonLabel").textContent="A 方抢按";$("reactionLButtonLabel").textContent="L 方抢按";$("reactionRoom").textContent="先得 5 分获胜";}
+    $("reactionSignal").className=`reaction-signal ${reaction.phase==="waiting"?"waiting":reaction.phase==="ready"?"ready":reaction.phase==="done"?"result":""}`;
+    if(reaction.phase==="waiting"){$("reactionText").textContent="保持专注，别抢跑…";$("reactionTime").textContent="等待绿色信号";}
+    else if(reaction.phase==="ready"){$("reactionText").textContent="现在！";$("reactionTime").textContent="快按下你的键";}
+    else if(reaction.phase==="done"){$("reactionText").textContent=reaction.matchWinner?`${reactionSide(reaction.matchWinner)}先得 5 分，赢下对决`:`${reactionSide(reaction.winner)}得分`;$("reactionTime").textContent=reaction.early?`${reactionSide(reaction.pressed)}抢跑犯规`:`${reaction.timeMs} ms`;}
+    else{$("reactionText").textContent=reaction.mode==="online"&&reaction.players.length<2?"等待搭子加入":"点击开始本轮";$("reactionTime").textContent=reaction.mode==="online"?`${reactionSide(reaction.myColor||1)}使用 ${reaction.myColor===2?"L":"A"} 键`:"A 键 / L 键";}
+    $("startReaction").disabled=reaction.busy||reaction.phase==="waiting"||reaction.phase==="ready"||(reaction.mode==="online"&&reaction.players.length<2);$("startReaction").textContent=reaction.phase==="done"?(reaction.matchWinner?"重新比赛":"下一轮"):"开始本轮";
+    document.querySelectorAll("[data-reaction-player]").forEach(button=>{const color=button.dataset.reactionPlayer==="A"?1:2;button.disabled=reaction.busy||(reaction.phase!=="waiting"&&reaction.phase!=="ready")||(reaction.mode==="online"&&reaction.myColor!==color);});
+  }
+  function setReactionError(text=""){$("reactionError").textContent=text;}
+  async function reactionApi(path,body){const response=await fetch(path,{method:body?"POST":"GET",headers:{"Content-Type":"application/json","X-Player-Id":reaction.playerId},body:body?JSON.stringify(body):undefined});const data=await response.json();if(!response.ok)throw new Error(data.error||"网络开小差了");return data;}
+  function syncReaction(data){const state=data.reaction||{};reaction.scores={A:(state.scores||[])[1]||0,L:(state.scores||[])[2]||0};reaction.phase=state.phase||"idle";reaction.winner=state.winner||0;reaction.pressed=state.pressed||0;reaction.early=Boolean(state.early);reaction.timeMs=state.timeMs||0;reaction.matchWinner=state.matchWinner||0;reaction.players=data.players||[];reaction.version=data.version;if(data.yourColor)reaction.myColor=data.yourColor;setReactionError();renderReaction();}
+  async function startReactionOnline(action){
+    setReactionError();
+    const name=$("reactionName").value.trim()||"摸鱼同事",code=$("reactionCode").value.trim().toUpperCase();
+    if(action==="join"&&code.length!==6){setReactionError("请输入六位房间码");return;}
+    try{
+      const body={name,type:"reaction"};
+      const data=action==="create"?await reactionApi("/api/rooms",body):await reactionApi(`/api/rooms/${code}/join`,body);
+      clearInterval(reaction.poll);clearTimeout(reaction.timer);Object.assign(reaction,{mode:"online",room:data.code,playerId:data.playerId,myColor:data.yourColor,busy:false});
+      localStorage.setItem("gomokuName",name);syncReaction(data);$("reactionShare").hidden=false;$("reactionLeave").hidden=false;history.replaceState(null,"",`?game=reaction&room=${reaction.room}`);reaction.poll=setInterval(pollReaction,400);
+    }catch(error){setReactionError(error.message);}
+  }
+  async function pollReaction(force=false){if(!reaction.room||document.hidden)return;try{const data=await reactionApi(`/api/rooms/${reaction.room}`);if(force||data.version!==reaction.version)syncReaction(data);}catch(_){}}
+  async function resetReaction(){clearTimeout(reaction.timer);if(reaction.mode==="online"){try{syncReaction(await reactionApi(`/api/rooms/${reaction.room}/reset`,{playerId:reaction.playerId}));}catch(error){setReactionError(error.message);}}else{Object.assign(reaction,{scores:{A:0,L:0},phase:"idle",winner:0,pressed:0,early:false,timeMs:0,matchWinner:0,busy:false});renderReaction();}}
+  function leaveReaction(){clearInterval(reaction.poll);clearTimeout(reaction.timer);Object.assign(reaction,{scores:{A:0,L:0},phase:"idle",mode:"local",room:"",playerId:"",myColor:0,players:[],version:0,winner:0,pressed:0,early:false,timeMs:0,matchWinner:0,busy:false});$("reactionShare").hidden=true;$("reactionLeave").hidden=true;history.replaceState(null,"",location.pathname);setReactionError();renderReaction();}
+  $("startReaction").onclick=startReaction;document.querySelectorAll("[data-reaction-player]").forEach(button=>button.onclick=()=>pressReaction(button.dataset.reactionPlayer));$("newReaction").onclick=resetReaction;$("reactionLocal").onclick=leaveReaction;$("reactionCreate").onclick=()=>startReactionOnline("create");$("reactionJoin").onclick=()=>startReactionOnline("join");$("reactionLeave").onclick=leaveReaction;$("reactionShare").onclick=async()=>{const url=new URL(location.href);url.search=new URLSearchParams({game:"reaction",room:reaction.room});try{await navigator.clipboard.writeText(`来玩反应力对决，房间码 ${reaction.room}\n${url}`);$("reactionTime").textContent="邀请链接已复制";}catch(_){$("reactionTime").textContent=`房间码：${reaction.room}`;}};
 
   document.addEventListener("keydown",e=>{if(!document.body.classList.contains("arcade-open"))return;const key=e.key.toLowerCase();if(visible("snake")){const dirs={arrowup:[0,-1],w:[0,-1],arrowdown:[0,1],s:[0,1],arrowleft:[-1,0],a:[-1,0],arrowright:[1,0],d:[1,0]};if(dirs[key]){e.preventDefault();setSnakeDir(...dirs[key]);}}else if(visible("reaction")&&(key==="a"||key==="l")){e.preventDefault();pressReaction(key.toUpperCase());}});
 
   document.querySelector('[data-open-game="snake"]').addEventListener("click",()=>{if(!snake.body.length)initSnake();});document.querySelector('[data-open-game="memory"]').addEventListener("click",()=>{if(!memory.cards.length)initMemory();});document.querySelector('[data-open-game="connect4"]').addEventListener("click",()=>{if(!c4.board.length)initC4();});
-  $("connectName").value=localStorage.getItem("gomokuName")||"";
-  const params=new URLSearchParams(location.search);if(params.get("game")==="connect4"){setTimeout(()=>{$("arcadeButton").click();document.querySelector('[data-open-game="connect4"]').click();$("connectCode").value=(params.get("room")||"").toUpperCase().slice(0,6);setC4Error("输入代号后点击“加入房间”");},220);}
+  $("connectName").value=localStorage.getItem("gomokuName")||"";$("reactionName").value=localStorage.getItem("gomokuName")||"";renderReaction();
+  const params=new URLSearchParams(location.search);if(params.get("game")==="connect4"){setTimeout(()=>{$("arcadeButton").click();document.querySelector('[data-open-game="connect4"]').click();$("connectCode").value=(params.get("room")||"").toUpperCase().slice(0,6);setC4Error("输入代号后点击“加入房间”");},220);}else if(params.get("game")==="reaction"){setTimeout(()=>{$("arcadeButton").click();document.querySelector('[data-open-game="reaction"]').click();$("reactionCode").value=(params.get("room")||"").toUpperCase().slice(0,6);setReactionError("输入代号后点击“加入房间”");},220);}
 })();

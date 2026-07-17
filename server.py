@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parent
 ROOMS: dict[str, dict] = {}
 LOCK = threading.RLock()
 BOARD_SIZE = 15
-GAME_SPECS = {"gomoku": (15, 15, 5), "connect4": (6, 7, 4), "tictactoe": (3, 3, 3)}
+GAME_SPECS = {"gomoku": (15, 15, 5), "connect4": (6, 7, 4), "tictactoe": (3, 3, 3), "reaction": (1, 1, 1)}
 
 
 def new_board(game_type: str = "gomoku") -> list[list[int]]:
@@ -28,11 +28,27 @@ def new_board(game_type: str = "gomoku") -> list[list[int]]:
     return [[0 for _ in range(cols)] for _ in range(rows)]
 
 
+def new_reaction_state() -> dict:
+    return {"scores": [0, 0, 0], "phase": "idle", "ready_at": 0.0, "winner": 0,
+            "pressed": 0, "early": False, "time_ms": 0, "match_winner": 0}
+
+
+def reaction_view(room: dict) -> dict:
+    state = room["reaction"]
+    if state["phase"] == "waiting" and time.time() >= state["ready_at"]:
+        state["phase"] = "ready"
+        room["version"] += 1
+    return {"scores": list(state["scores"]), "phase": state["phase"], "winner": state["winner"],
+            "pressed": state["pressed"], "early": state["early"], "timeMs": state["time_ms"],
+            "matchWinner": state["match_winner"]}
+
+
 def room_view(room: dict, player_id: str = "") -> dict:
     players = [{"name": p["name"], "color": p["color"]} for p in room["players"].values()]
     public_moves = [{key: move[key] for key in ("row", "col", "color")} for move in room["moves"]]
     me = room["players"].get(player_id)
-    return {
+    reaction = reaction_view(room) if room.get("type") == "reaction" else None
+    payload = {
         "code": room["code"], "type": room.get("type", "gomoku"),
         "board": room["board"], "turn": room["turn"],
         "winner": room["winner"], "winningCells": room["winning_cells"],
@@ -40,6 +56,9 @@ def room_view(room: dict, player_id: str = "") -> dict:
         "yourColor": me["color"] if me else 0, "signal": room["signal"],
         "createdAt": room["created_at"], "round": room.get("round", 1),
     }
+    if reaction is not None:
+        payload["reaction"] = reaction
+    return payload
 
 
 def find_win(board: list[list[int]], row: int, col: int, color: int, target: int = 5) -> list[list[int]]:
@@ -120,7 +139,8 @@ class Handler(BaseHTTPRequestHandler):
         if len(parts) == 4 and parts[:2] == ["api", "rooms"]:
             code, action = parts[2].upper(), parts[3]
             handlers = {"join": self.join_room, "move": self.play_move, "reset": self.reset_room,
-                        "undo": self.undo_move, "signal": self.send_signal}
+                        "undo": self.undo_move, "signal": self.send_signal,
+                        "reaction-start": self.start_reaction, "reaction-press": self.press_reaction}
             if action in handlers:
                 handlers[action](code, data)
                 return
@@ -141,6 +161,8 @@ class Handler(BaseHTTPRequestHandler):
                     "winning_cells": [], "moves": [], "version": 1,
                     "players": {player_id: {"name": clean_name(data.get("name")), "color": 1}},
                     "signal": None, "round": 1, "created_at": now, "last_seen": now}
+            if game_type == "reaction":
+                room["reaction"] = new_reaction_state()
             ROOMS[code] = room
             self.send_json({"playerId": player_id, **room_view(room, player_id)}, HTTPStatus.CREATED)
 
@@ -173,6 +195,8 @@ class Handler(BaseHTTPRequestHandler):
             row, col = data.get("row"), data.get("col")
             if not player:
                 self.send_json({"error": "你不是这个房间的玩家"}, 403); return
+            if game_type == "reaction":
+                self.send_json({"error": "反应力对决请使用抢按接口"}, 400); return
             if len(room["players"]) < 2:
                 self.send_json({"error": "等搭子进入后再落子"}, 409); return
             if room["winner"]:
@@ -211,9 +235,50 @@ class Handler(BaseHTTPRequestHandler):
             if not room or data.get("playerId") not in room["players"]:
                 self.send_json({"error": "无法重开这个房间"}, 403); return
             room.update(board=new_board(room.get("type", "gomoku")), turn=1, winner=0, winning_cells=[], moves=[])
+            if room.get("type") == "reaction":
+                room["reaction"] = new_reaction_state()
             room["round"] = room.get("round", 1) + 1
             room["version"] += 1
             self.send_json(room_view(room, data["playerId"]))
+
+    def start_reaction(self, code: str, data: dict) -> None:
+        with LOCK:
+            room = ROOMS.get(code)
+            player_id, player = self.get_player(room or {"players": {}}, data)
+            if not room or room.get("type") != "reaction" or not player:
+                self.send_json({"error": "无法开始这个反应力房间"}, 403); return
+            if len(room["players"]) < 2:
+                self.send_json({"error": "等搭子进入后再开始"}, 409); return
+            state = room["reaction"]
+            if state["phase"] in ("waiting", "ready"):
+                self.send_json({"error": "本轮已经开始了"}, 409); return
+            if state["match_winner"]:
+                state["scores"] = [0, 0, 0]
+            state.update(phase="waiting", ready_at=time.time() + 1.6 + secrets.randbelow(2601) / 1000,
+                         winner=0, pressed=0, early=False, time_ms=0, match_winner=0)
+            room["version"] += 1
+            room["last_seen"] = time.time()
+            self.send_json(room_view(room, player_id))
+
+    def press_reaction(self, code: str, data: dict) -> None:
+        with LOCK:
+            room = ROOMS.get(code)
+            player_id, player = self.get_player(room or {"players": {}}, data)
+            if not room or room.get("type") != "reaction" or not player:
+                self.send_json({"error": "你不是这个反应力房间的玩家"}, 403); return
+            state = room["reaction"]
+            if state["phase"] not in ("waiting", "ready"):
+                self.send_json({"error": "本轮还没开始或已经结束"}, 409); return
+            now = time.time()
+            early = state["phase"] == "waiting" and now < state["ready_at"]
+            winner = 3 - player["color"] if early else player["color"]
+            time_ms = 0 if early else max(0, round((now - state["ready_at"]) * 1000))
+            state["scores"][winner] += 1
+            state.update(phase="done", winner=winner, pressed=player["color"], early=early,
+                         time_ms=time_ms, match_winner=winner if state["scores"][winner] >= 5 else 0)
+            room["version"] += 1
+            room["last_seen"] = now
+            self.send_json(room_view(room, player_id))
 
     def undo_move(self, code: str, data: dict) -> None:
         with LOCK:

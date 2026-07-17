@@ -1,0 +1,32 @@
+.reaction-setup {
+  margin-bottom: 16px;
+}
+
+.reaction-score span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reaction-buttons button:disabled {
+  cursor: default;
+  opacity: .42;
+}
+
+.reaction-buttons button:not(:disabled):active {
+  transform: scale(.98);
+}
+
+.reaction-tools {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 700px) {
+  .reaction-setup {
+    padding: 10px;
+  }
+
+  .reaction-score span {
+    max-width: 105px;
+  }
+}
