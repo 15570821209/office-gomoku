@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parent
 ROOMS: dict[str, dict] = {}
 LOCK = threading.RLock()
 BOARD_SIZE = 15
-GAME_SPECS = {"gomoku": (15, 15, 5), "connect4": (6, 7, 4)}
+GAME_SPECS = {"gomoku": (15, 15, 5), "connect4": (6, 7, 4), "tictactoe": (3, 3, 3)}
 
 
 def new_board(game_type: str = "gomoku") -> list[list[int]]:
@@ -38,7 +38,7 @@ def room_view(room: dict, player_id: str = "") -> dict:
         "winner": room["winner"], "winningCells": room["winning_cells"],
         "moves": public_moves, "version": room["version"], "players": players,
         "yourColor": me["color"] if me else 0, "signal": room["signal"],
-        "createdAt": room["created_at"],
+        "createdAt": room["created_at"], "round": room.get("round", 1),
     }
 
 
@@ -140,7 +140,7 @@ class Handler(BaseHTTPRequestHandler):
             room = {"code": code, "type": game_type, "board": new_board(game_type), "turn": 1, "winner": 0,
                     "winning_cells": [], "moves": [], "version": 1,
                     "players": {player_id: {"name": clean_name(data.get("name")), "color": 1}},
-                    "signal": None, "created_at": now, "last_seen": now}
+                    "signal": None, "round": 1, "created_at": now, "last_seen": now}
             ROOMS[code] = room
             self.send_json({"playerId": player_id, **room_view(room, player_id)}, HTTPStatus.CREATED)
 
@@ -187,8 +187,10 @@ class Handler(BaseHTTPRequestHandler):
                     row -= 1
                 if row < 0:
                     self.send_json({"error": "这一列已经满了"}, 409); return
-            elif not isinstance(row, int) or not isinstance(col, int) or not (0 <= row < 15 and 0 <= col < 15):
-                self.send_json({"error": "落子位置无效"}, 400); return
+            else:
+                rows, cols, _ = GAME_SPECS[game_type]
+                if not isinstance(row, int) or not isinstance(col, int) or not (0 <= row < rows and 0 <= col < cols):
+                    self.send_json({"error": "落子位置无效"}, 400); return
             if room["board"][row][col]:
                 self.send_json({"error": "这里已经有棋子了"}, 409); return
             color = player["color"]
@@ -209,6 +211,7 @@ class Handler(BaseHTTPRequestHandler):
             if not room or data.get("playerId") not in room["players"]:
                 self.send_json({"error": "无法重开这个房间"}, 403); return
             room.update(board=new_board(room.get("type", "gomoku")), turn=1, winner=0, winning_cells=[], moves=[])
+            room["round"] = room.get("round", 1) + 1
             room["version"] += 1
             self.send_json(room_view(room, data["playerId"]))
 

@@ -155,24 +155,55 @@
   $("flagMode").addEventListener("click",()=>{mines.flagMode=!mines.flagMode;$("flagMode").classList.toggle("active",mines.flagMode);$("flagMode").setAttribute("aria-pressed",String(mines.flagMode));$("flagMode").textContent=`⚑ 插旗模式：${mines.flagMode?"开":"关"}`;});
   setInterval(()=>{if(mines.started&&!mines.over&&activeGame==="mines")$("mineTime").textContent=String(Math.min(999,Math.floor((Date.now()-mines.start)/1000))).padStart(3,"0");},500);
 
-  // 井字棋
-  const ttt={board:[],turn:"X",over:false,scores:{X:0,O:0,D:0}};
+  // 井字棋（同屏 + 在线）
+  const ttt={board:[],turn:1,winner:0,winning:[],draw:false,scores:{X:0,O:0,D:0},mode:"local",room:"",playerId:"",myColor:0,players:[],version:0,round:1,countedRound:0,poll:null,busy:false};
   const WINS=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-  function initTtt(){ttt.board=Array(9).fill("");ttt.turn="X";ttt.over=false;renderTtt();$("tttStatus").textContent="项目经理先手";}
-  function playTtt(index){
-    if(ttt.over||ttt.board[index])return;ttt.board[index]=ttt.turn;
-    const win=WINS.find(combo=>combo.every(i=>ttt.board[i]===ttt.turn));
-    if(win){ttt.over=true;ttt.scores[ttt.turn]++;$("tttStatus").textContent=`${ttt.turn==="X"?"项目经理":"需求方"}连成一线，拿下本局`;renderTtt(win);return;}
-    if(ttt.board.every(Boolean)){ttt.over=true;ttt.scores.D++;$("tttStatus").textContent="双方握手言和，再开一局";renderTtt();return;}
-    ttt.turn=ttt.turn==="X"?"O":"X";$("tttStatus").textContent=`轮到${ttt.turn==="X"?"项目经理":"需求方"}落子`;renderTtt();
+  function initTtt(){ttt.board=Array(9).fill(0);ttt.turn=1;ttt.winner=0;ttt.winning=[];ttt.draw=false;ttt.busy=false;renderTtt();}
+  function tttSide(color){return color===1?"X 方":"O 方";}
+  async function playTtt(index){
+    if(ttt.busy||ttt.winner||ttt.draw||ttt.board[index])return;
+    if(ttt.mode==="online"){
+      if(ttt.players.length<2){setTttStatus("等搭子加入后再落子");return;}
+      if(ttt.myColor!==ttt.turn){setTttStatus("还没轮到你");return;}
+      ttt.busy=true;renderTtt();
+      try{syncTtt(await tttApi(`/api/rooms/${ttt.room}/move`,{playerId:ttt.playerId,row:Math.floor(index/3),col:index%3}));}
+      catch(error){setTttError(error.message);}finally{ttt.busy=false;renderTtt();}
+      return;
+    }
+    const color=ttt.turn;ttt.board[index]=color;
+    const win=WINS.find(combo=>combo.every(i=>ttt.board[i]===color));
+    if(win){ttt.winner=color;ttt.winning=win;ttt.scores[color===1?"X":"O"]++;}
+    else if(ttt.board.every(Boolean)){ttt.draw=true;ttt.scores.D++;}
+    else ttt.turn=3-color;
+    renderTtt();
   }
-  function renderTtt(win=[]){
-    $("tttBoard").innerHTML=ttt.board.map((value,index)=>`<button class="ttt-cell ${value==="O"?"o":""} ${win.includes(index)?"win":""}" role="gridcell" data-ttt-index="${index}" aria-label="第 ${Math.floor(index/3)+1} 行第 ${index%3+1} 列${value?`，${value} 方`:"，空"}">${value==="X"?"×":value==="O"?"○":""}</button>`).join("");
-    $("tttXPlayer").classList.toggle("active",!ttt.over&&ttt.turn==="X");$("tttOPlayer").classList.toggle("active",!ttt.over&&ttt.turn==="O");
+  function renderTtt(){
+    const onlineTurn=ttt.mode!=="online"||(ttt.players.length===2&&ttt.myColor===ttt.turn&&!ttt.busy);
+    $("tttBoard").innerHTML=ttt.board.map((value,index)=>`<button class="ttt-cell ${value===2?"o":""} ${ttt.winning.includes(index)?"win":""}" role="gridcell" data-ttt-index="${index}" aria-label="第 ${Math.floor(index/3)+1} 行第 ${index%3+1} 列${value?`，${tttSide(value)}`:"，空"}" ${value||ttt.winner||ttt.draw||!onlineTurn?"disabled":""}>${value===1?"×":value===2?"○":""}</button>`).join("");
+    $("tttXPlayer").classList.toggle("active",!ttt.winner&&!ttt.draw&&ttt.turn===1);$("tttOPlayer").classList.toggle("active",!ttt.winner&&!ttt.draw&&ttt.turn===2);
     $("tttXScore").textContent=ttt.scores.X;$("tttOScore").textContent=ttt.scores.O;$("tttDrawScore").textContent=ttt.scores.D;
+    if(ttt.mode==="online"){
+      const x=ttt.players.find(p=>p.color===1),o=ttt.players.find(p=>p.color===2);
+      $("tttXName").textContent=x?`${x.name}${ttt.myColor===1?"（我）":""}`:"等待加入";$("tttOName").textContent=o?`${o.name}${ttt.myColor===2?"（我）":""}`:"等待加入";
+    }else{$("tttXName").textContent="项目经理";$("tttOName").textContent="需求方";}
+    if(ttt.winner)setTttStatus(`${tttSide(ttt.winner)}连成一线，拿下本局`);
+    else if(ttt.draw)setTttStatus("双方握手言和，再开一局");
+    else if(ttt.mode==="online"&&ttt.players.length<2)setTttStatus(`等待搭子加入 · 房间 ${ttt.room}`);
+    else if(ttt.mode==="online")setTttStatus(ttt.myColor===ttt.turn?`轮到你落子（${tttSide(ttt.myColor)}）`:`等待${tttSide(ttt.turn)}落子`);
+    else setTttStatus(`轮到${ttt.turn===1?"项目经理":"需求方"}落子`);
   }
+  function setTttStatus(text){$("tttStatus").textContent=text;}function setTttError(text=""){$("tttError").textContent=text;}
+  async function tttApi(path,body){const response=await fetch(path,{method:body?"POST":"GET",headers:{"Content-Type":"application/json","X-Player-Id":ttt.playerId},body:body?JSON.stringify(body):undefined});const data=await response.json();if(!response.ok)throw new Error(data.error||"网络开小差了");return data;}
+  function syncTtt(data){ttt.board=data.board.flat();ttt.turn=data.turn;ttt.winner=data.winner;ttt.winning=(data.winningCells||[]).map(([row,col])=>row*3+col);ttt.draw=!ttt.winner&&ttt.board.every(Boolean);ttt.players=data.players||[];ttt.version=data.version;ttt.round=data.round||1;if(data.yourColor)ttt.myColor=data.yourColor;if((ttt.winner||ttt.draw)&&ttt.countedRound!==ttt.round){ttt.scores[ttt.winner?(ttt.winner===1?"X":"O"):"D"]++;ttt.countedRound=ttt.round;}renderTtt();}
+  async function startTttOnline(action){setTttError();const name=$("tttName").value.trim()||"摸鱼同事",code=$("tttCode").value.trim().toUpperCase();if(action==="join"&&code.length!==6){setTttError("请输入六位房间码");return;}try{const data=action==="create"?await tttApi("/api/rooms",{name,type:"tictactoe"}):await tttApi(`/api/rooms/${code}/join`,{name,type:"tictactoe"});clearInterval(ttt.poll);Object.assign(ttt,{mode:"online",room:data.code,playerId:data.playerId,myColor:data.yourColor,scores:{X:0,O:0,D:0},countedRound:0});localStorage.setItem("gomokuName",name);syncTtt(data);$("tttShare").hidden=false;$("tttLeave").hidden=false;history.replaceState(null,"",`?game=tictactoe&room=${ttt.room}`);ttt.poll=setInterval(pollTtt,800);}catch(error){setTttError(error.message);}}
+  async function pollTtt(){if(!ttt.room||document.hidden)return;try{const data=await tttApi(`/api/rooms/${ttt.room}`);if(data.version!==ttt.version)syncTtt(data);}catch(_){}}
+  async function restartTtt(){if(ttt.mode==="online"){try{syncTtt(await tttApi(`/api/rooms/${ttt.room}/reset`,{playerId:ttt.playerId}));}catch(error){setTttError(error.message);}}else initTtt();}
+  function leaveTtt(){clearInterval(ttt.poll);Object.assign(ttt,{mode:"local",room:"",playerId:"",myColor:0,players:[],version:0,round:1,countedRound:0,scores:{X:0,O:0,D:0}});$("tttShare").hidden=true;$("tttLeave").hidden=true;history.replaceState(null,"",location.pathname);setTttError();initTtt();}
   $("tttBoard").addEventListener("click",e=>{const cell=e.target.closest("[data-ttt-index]");if(cell)playTtt(Number(cell.dataset.tttIndex));});
-  $("tttBoard").addEventListener("keydown",e=>{const cell=e.target.closest("[data-ttt-index]");if(!cell)return;const moves={ArrowLeft:-1,ArrowRight:1,ArrowUp:-3,ArrowDown:3};if(!(e.key in moves))return;e.preventDefault();const next=Math.max(0,Math.min(8,Number(cell.dataset.tttIndex)+moves[e.key]));$("tttBoard").querySelector(`[data-ttt-index="${next}"]`).focus();});
-  $("newTtt").addEventListener("click",initTtt);
-  $("resetTttScore").addEventListener("click",()=>{ttt.scores={X:0,O:0,D:0};initTtt();});
+  $("tttBoard").addEventListener("keydown",e=>{const cell=e.target.closest("[data-ttt-index]");if(!cell)return;const moves={ArrowLeft:-1,ArrowRight:1,ArrowUp:-3,ArrowDown:3};if(!(e.key in moves))return;e.preventDefault();const next=Math.max(0,Math.min(8,Number(cell.dataset.tttIndex)+moves[e.key]));$("tttBoard").querySelector(`[data-ttt-index="${next}"]`)?.focus();});
+  $("newTtt").addEventListener("click",restartTtt);$("tttLocal").addEventListener("click",leaveTtt);$("tttCreate").addEventListener("click",()=>startTttOnline("create"));$("tttJoin").addEventListener("click",()=>startTttOnline("join"));$("tttLeave").addEventListener("click",leaveTtt);
+  $("resetTttScore").addEventListener("click",()=>{ttt.scores={X:0,O:0,D:0};renderTtt();});
+  $("tttShare").addEventListener("click",async()=>{const url=new URL(location.href);url.search=new URLSearchParams({game:"tictactoe",room:ttt.room});try{await navigator.clipboard.writeText(`来玩井字棋，房间码 ${ttt.room}\n${url}`);setTttStatus("邀请链接已复制");}catch(_){setTttStatus(`房间码：${ttt.room}`);}});
+  $("tttName").value=localStorage.getItem("gomokuName")||"";
+  const tttParams=new URLSearchParams(location.search);if(tttParams.get("game")==="tictactoe"){setTimeout(()=>{$("arcadeButton").click();document.querySelector('[data-open-game="tictactoe"]').click();$("tttCode").value=(tttParams.get("room")||"").toUpperCase().slice(0,6);setTttError("输入代号后点击“加入房间”");},220);}
 })();

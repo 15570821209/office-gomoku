@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="arcade.css">
   <link rel="stylesheet" href="arcade-extra.css">
+  <link rel="stylesheet" href="ttt-online.css">
 </head>
 <body>
   <div class="app-shell">
@@ -182,7 +183,7 @@
           </button>
           <button class="arcade-card" data-open-game="tictactoe">
             <span class="arcade-card-art ttt-art"><i>×</i><i></i><i>○</i><i>○</i><i>×</i><i></i><i></i><i></i><i>×</i></span>
-            <span class="arcade-card-copy"><em>双人 · 同屏</em><strong>井字棋</strong><small>三分钟决出谁去拿外卖</small></span>
+            <span class="arcade-card-copy"><em>双人 · 在线 / 同屏</em><strong>井字棋</strong><small>三分钟决出谁去拿外卖</small></span>
             <b>开始游戏 →</b>
           </button>
           <button class="arcade-card" data-open-game="snake">
@@ -244,18 +245,24 @@
       <section class="arcade-view mini-game-view" data-arcade-view="tictactoe" hidden>
         <div class="mini-heading">
           <button class="mini-back" data-back-arcade>← 游戏库</button>
-          <div><p>双人 · 同屏</p><h2>井字棋</h2><span>轮流落子，率先连成一条线的人获胜。</span></div>
+          <div><p>双人 · 在线 / 同屏</p><h2>井字棋</h2><span>创建房间邀请搭子，或在同一台设备上轮流落子。</span></div>
           <button class="mini-new" id="newTtt">下一局</button>
         </div>
         <div class="game-stage ttt-stage">
+          <div class="connect-setup ttt-setup" id="tttSetup">
+            <label>你的代号<input id="tttName" maxlength="12" placeholder="例如：摸鱼专员"></label>
+            <div class="connect-actions"><button id="tttLocal">双人同屏</button><button id="tttCreate">创建在线房间</button></div>
+            <div class="connect-join"><input id="tttCode" maxlength="6" placeholder="输入六位房间码"><button id="tttJoin">加入房间</button></div>
+            <p id="tttError"></p>
+          </div>
           <div class="ttt-scoreboard">
-            <div class="ttt-player active" id="tttXPlayer"><i>×</i><span>项目经理<small>X 方</small></span><strong id="tttXScore">0</strong></div>
+            <div class="ttt-player active" id="tttXPlayer"><i>×</i><span><b id="tttXName">项目经理</b><small>X 方</small></span><strong id="tttXScore">0</strong></div>
             <div class="ttt-draws"><span>平局</span><strong id="tttDrawScore">0</strong></div>
-            <div class="ttt-player" id="tttOPlayer"><i>○</i><span>需求方<small>O 方</small></span><strong id="tttOScore">0</strong></div>
+            <div class="ttt-player" id="tttOPlayer"><i>○</i><span><b id="tttOName">需求方</b><small>O 方</small></span><strong id="tttOScore">0</strong></div>
           </div>
           <div class="ttt-board" id="tttBoard" role="grid" aria-label="井字棋棋盘"></div>
           <p class="mini-status" id="tttStatus" aria-live="polite">项目经理先手</p>
-          <button class="score-reset" id="resetTttScore">清空比分</button>
+          <div class="connect-tools ttt-tools"><button id="tttShare" hidden>复制邀请链接</button><button id="tttLeave" hidden>退出在线房间</button><button id="resetTttScore">清空比分</button></div>
         </div>
       </section>
 
